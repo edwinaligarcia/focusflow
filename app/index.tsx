@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import {
   initDatabase,
   getTasks,
@@ -17,6 +18,7 @@ import {
   toggleTask as dbToggleTask,
   deleteTask as dbDeleteTask,
 } from "./lib/db";
+import { getSession } from "./lib/auth";
 
 interface Task {
   id: string;
@@ -28,6 +30,7 @@ export default function DailyTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -42,8 +45,27 @@ export default function DailyTasks() {
   }, []);
 
   useEffect(() => {
-    loadTasks();
+    const checkAuth = async () => {
+      setIsCheckingAuth(true);
+      const session = await getSession();
+      if (!session) {
+        setIsCheckingAuth(false);
+        router.replace("/login");
+        return;
+      }
+      setIsCheckingAuth(false);
+      loadTasks();
+    };
+    checkAuth();
   }, [loadTasks]);
+
+  if (isCheckingAuth) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   const addTask = async () => {
     if (newTask.trim()) {
@@ -213,5 +235,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#999",
     marginTop: 40,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#666",
   },
 });
