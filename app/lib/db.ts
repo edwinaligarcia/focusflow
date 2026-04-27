@@ -69,6 +69,12 @@ export const initDatabase = async (): Promise<void> => {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS notes (
+      date TEXT PRIMARY KEY,
+      content TEXT NOT NULL DEFAULT '',
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 };
 
@@ -177,4 +183,26 @@ export const setPreference = async (key: string, value: string): Promise<void> =
 export const deletePreference = async (key: string): Promise<void> => {
   if (!db) await initDatabase();
   await db!.runAsync("DELETE FROM preferences WHERE key = ?", [key]);
+};
+
+export const getNoteForDate = async (date: string): Promise<string> => {
+  if (!db) await initDatabase();
+  const result = await db!.getFirstAsync<{ content: string }>(
+    "SELECT content FROM notes WHERE date = ?",
+    [date]
+  );
+  return result?.content ?? "";
+};
+
+export const saveNoteForDate = async (date: string, content: string): Promise<void> => {
+  if (!db) await initDatabase();
+  await db!.runAsync(
+    "INSERT OR REPLACE INTO notes (date, content, updated_at) VALUES (?, ?, datetime('now'))",
+    [date, content]
+  );
+};
+
+export const deleteNoteForDate = async (date: string): Promise<void> => {
+  if (!db) await initDatabase();
+  await db!.runAsync("DELETE FROM notes WHERE date = ?", [date]);
 };

@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import {
@@ -81,9 +82,7 @@ export default function DailyTasks() {
     if (task) {
       const newCompleted = !task.completed;
       await dbToggleTask(id, newCompleted);
-      setTasks(
-        tasks.map((t) => (t.id === id ? { ...t, completed: newCompleted } : t))
-      );
+      setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: newCompleted } : t)));
     }
   };
 
@@ -92,30 +91,6 @@ export default function DailyTasks() {
     setTasks(tasks.filter((task) => task.id !== id));
   };
 
-  const renderTask = ({ item }: { item: Task }) => (
-    <View style={styles.taskItem}>
-      <TouchableOpacity
-        style={styles.checkbox}
-        onPress={() => toggleTask(item.id)}
-      >
-        <Ionicons
-          name={item.completed ? "checkbox" : "square-outline"}
-          size={24}
-          color={item.completed ? "#4CAF50" : "#666"}
-        />
-      </TouchableOpacity>
-      <Text
-        style={[styles.taskText, item.completed && styles.taskCompleted]}
-        onPress={() => toggleTask(item.id)}
-      >
-        {item.text}
-      </Text>
-      <TouchableOpacity onPress={() => deleteTask(item.id)}>
-        <Ionicons name="trash-outline" size={20} color="#ff4444" />
-      </TouchableOpacity>
-    </View>
-  );
-
   const today = new Date();
   const dateStr = today.toLocaleDateString("en-US", {
     weekday: "long",
@@ -123,86 +98,123 @@ export default function DailyTasks() {
     day: "numeric",
   });
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>Daily Tasks</Text>
-        <Text style={styles.date}>{dateStr}</Text>
-      </View>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Add a new task..."
-          value={newTask}
-          onChangeText={setNewTask}
-          onSubmitEditing={addTask}
-          returnKeyType="done"
+  const renderTask = ({ item }: { item: Task }) => (
+    <View style={[styles.taskItem, item.completed && styles.taskItemCompleted]}>
+      <TouchableOpacity style={styles.checkbox} onPress={() => toggleTask(item.id)}>
+        <Ionicons
+          name={item.completed ? "checkbox" : "square-outline"}
+          size={24}
+          color={item.completed ? "#4CAF50" : "rgba(255,255,255,0.5)"}
         />
-        <TouchableOpacity style={styles.addButton} onPress={addTask}>
-          <Ionicons name="add" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
+      <Text
+        style={[styles.taskText, item.completed && styles.taskTextCompleted]}
+        onPress={() => toggleTask(item.id)}
+      >
+        {item.text}
+      </Text>
+      <TouchableOpacity onPress={() => deleteTask(item.id)}>
+        <Ionicons name="trash-outline" size={20} color="rgba(255,255,255,0.3)" />
+      </TouchableOpacity>
+    </View>
+  );
 
-      <FlatList
-        data={tasks}
-        keyExtractor={(item) => item.id}
-        renderItem={renderTask}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          !isLoading ? (
-            <Text style={styles.emptyText}>No tasks yet. Add one above!</Text>
-          ) : null
-        }
-      />
-    </KeyboardAvoidingView>
+  return (
+    <LinearGradient
+      colors={["#0f0c29", "#302b63", "#24243e"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
+    >
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>Daily Tasks</Text>
+          <Text style={styles.date}>{dateStr}</Text>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Add a new task..."
+            placeholderTextColor="rgba(255,255,255,0.35)"
+            value={newTask}
+            onChangeText={setNewTask}
+            onSubmitEditing={addTask}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.addButton} onPress={addTask}>
+            <Ionicons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={tasks}
+          keyExtractor={(item) => item.id}
+          renderItem={renderTask}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            !isLoading ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="checkbox-outline" size={48} color="rgba(255,255,255,0.2)" />
+                <Text style={styles.emptyText}>No tasks yet</Text>
+                <Text style={styles.emptySubtext}>Add one above to get started</Text>
+              </View>
+            ) : null
+          }
+        />
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   header: {
-    padding: 20,
     paddingTop: 60,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    paddingBottom: 20,
+    paddingHorizontal: 20,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
+    color: "#fff",
   },
   date: {
     fontSize: 14,
-    color: "#666",
+    color: "#aaa",
     marginTop: 4,
   },
   inputContainer: {
     flexDirection: "row",
-    padding: 16,
-    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   input: {
     flex: 1,
     height: 48,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 10,
     paddingHorizontal: 16,
     fontSize: 16,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
   },
   addButton: {
     width: 48,
     height: 48,
     backgroundColor: "#4CAF50",
-    borderRadius: 8,
-    marginLeft: 12,
+    borderRadius: 10,
+    marginLeft: 10,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -210,40 +222,60 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    flexGrow: 1,
   },
   taskItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
+    backgroundColor: "rgba(255,255,255,0.07)",
     padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 12,
   },
-  checkbox: {
-    marginRight: 12,
+  taskItemCompleted: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(255,255,255,0.04)",
   },
+  checkbox: {},
   taskText: {
     flex: 1,
     fontSize: 16,
+    color: "#fff",
+    lineHeight: 22,
   },
-  taskCompleted: {
+  taskTextCompleted: {
     textDecorationLine: "line-through",
-    color: "#999",
+    color: "rgba(255,255,255,0.35)",
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+    gap: 8,
   },
   emptyText: {
-    textAlign: "center",
-    color: "#999",
-    marginTop: 40,
+    fontSize: 16,
+    color: "rgba(255,255,255,0.4)",
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.25)",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#0f0c29",
   },
   loadingText: {
     fontSize: 16,
-    color: "#666",
+    color: "#fff",
   },
 });

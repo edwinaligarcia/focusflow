@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -10,6 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import {
   initDatabase,
   getEvents,
@@ -23,25 +25,37 @@ interface DayEvent {
   date: string;
 }
 
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 const getWeekDates = (): Date[] => {
   const today = new Date();
   const dayOfWeek = today.getDay();
-  const dates: Date[] = [];
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - dayOfWeek + i);
-    dates.push(date);
-  }
-  
-  return dates;
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(today);
+    d.setDate(today.getDate() - dayOfWeek + i);
+    return d;
+  });
+};
+
+const getDateKey = (date: Date): string => date.toISOString().split("T")[0];
+
+const isToday = (date: Date): boolean => {
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
 };
 
 export default function WeeklyCalendar() {
+  const today = new Date();
   const [weekDates] = useState<Date[]>(getWeekDates());
+  const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [events, setEvents] = useState<Record<string, DayEvent[]>>({});
   const [newEvent, setNewEvent] = useState("");
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   const loadEvents = useCallback(async () => {
     try {
@@ -49,9 +63,7 @@ export default function WeeklyCalendar() {
       const rows = await getEvents();
       const grouped: Record<string, DayEvent[]> = {};
       rows.forEach((r: { id: string; date: string; text: string }) => {
-        if (!grouped[r.date]) {
-          grouped[r.date] = [];
-        }
+        if (!grouped[r.date]) grouped[r.date] = [];
         grouped[r.date].push(r);
       });
       setEvents(grouped);
@@ -60,225 +72,366 @@ export default function WeeklyCalendar() {
     }
   }, []);
 
-  useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
+  useFocusEffect(
+    useCallback(() => {
+      loadEvents();
+    }, [loadEvents])
+  );
 
-  const getDateKey = (date: Date): string => {
-    return date.toISOString().split("T")[0];
+  const selectedKey = getDateKey(selectedDate);
+  const selectedEvents = events[selectedKey] || [];
+
+  const addEvent = async () => {
+    if (!newEvent.trim()) return;
+    const id = Date.now().toString();
+    await dbAddEvent(id, selectedKey, newEvent.trim());
+    setEvents((prev) => ({
+      ...prev,
+      [selectedKey]: [...(prev[selectedKey] || []), { id, date: selectedKey, text: newEvent.trim() }],
+    }));
+    setNewEvent("");
+    setIsAdding(false);
   };
 
-  const addEvent = async (dateKey: string) => {
-    if (newEvent.trim()) {
-      const id = Date.now().toString();
-      await dbAddEvent(id, dateKey, newEvent.trim());
-      setEvents({
-        ...events,
-        [dateKey]: [...(events[dateKey] || []), { id, date: dateKey, text: newEvent.trim() }],
-      });
-      setNewEvent("");
-      setSelectedDay(null);
-    }
-  };
-
-  const deleteEvent = async (dateKey: string, eventId: string) => {
+  const deleteEvent = async (eventId: string) => {
     await dbDeleteEvent(eventId);
-    setEvents({
-      ...events,
-      [dateKey]: events[dateKey].filter((e) => e.id !== eventId),
-    });
+    setEvents((prev) => ({
+      ...prev,
+      [selectedKey]: (prev[selectedKey] || []).filter((e) => e.id !== eventId),
+    }));
   };
 
-  const formatDayName = (date: Date): string => {
-    return date.toLocaleDateString("en-US", { weekday: "short" });
+  const handleAddPress = () => {
+    setIsAdding(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
 
-  const formatDayNumber = (date: Date): string => {
-    return date.getDate().toString();
-  };
+  const selectedDateStr = selectedDate.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 
-  const isToday = (date: Date): boolean => {
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
+  const weekRangeStr = (() => {
+    const first = weekDates[0];
+    const last = weekDates[6];
+    const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+    return `${first.toLocaleDateString("en-US", opts)} – ${last.toLocaleDateString("en-US", opts)}`;
+  })();
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    <LinearGradient
+      colors={["#0f0c29", "#302b63", "#24243e"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.gradient}
     >
-      <View style={styles.header}>
-        <Text style={styles.title}>Weekly Calendar</Text>
-        <Text style={styles.subtitle}>This Week</Text>
-      </View>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Weekly Calendar</Text>
+          <Text style={styles.subtitle}>{weekRangeStr}</Text>
+        </View>
 
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.weekContainer}>
+        {/* Day Strip */}
+        <View style={styles.weekStrip}>
           {weekDates.map((date) => {
-            const dateKey = getDateKey(date);
-            const dayEvents = events[dateKey] || [];
-            const today = isToday(date);
-
+            const key = getDateKey(date);
+            const selected = getDateKey(selectedDate) === key;
+            const today_ = isToday(date);
+            const hasEvents = (events[key] || []).length > 0;
             return (
-              <View
-                key={dateKey}
-                style={[styles.dayColumn, today && styles.todayColumn]}
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.dayPill,
+                  selected && styles.dayPillSelected,
+                  today_ && !selected && styles.dayPillToday,
+                ]}
+                onPress={() => {
+                  setSelectedDate(date);
+                  setIsAdding(false);
+                  setNewEvent("");
+                }}
               >
-                <View style={styles.dayHeader}>
-                  <Text style={[styles.dayName, today && styles.todayText]}>
-                    {formatDayName(date)}
-                  </Text>
-                  <Text style={[styles.dayNumber, today && styles.todayText]}>
-                    {formatDayNumber(date)}
-                  </Text>
-                </View>
-
-                <View style={styles.eventsContainer}>
-                  {dayEvents.map((event) => (
-                    <View key={event.id} style={styles.eventItem}>
-                      <Text style={styles.eventText} numberOfLines={2}>
-                        {event.text}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={() => deleteEvent(dateKey, event.id)}
-                      >
-                        <Ionicons name="close" size={14} color="#666" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-
-                  {selectedDay === dateKey ? (
-                    <View style={styles.inputWrapper}>
-                      <TextInput
-                        style={styles.eventInput}
-                        placeholder="Add event..."
-                        value={newEvent}
-                        onChangeText={setNewEvent}
-                        onSubmitEditing={() => addEvent(dateKey)}
-                        autoFocus
-                      />
-                      <TouchableOpacity onPress={() => addEvent(dateKey)}>
-                        <Ionicons name="checkmark" size={20} color="#4CAF50" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.addEventButton}
-                      onPress={() => setSelectedDay(dateKey)}
-                    >
-                      <Ionicons name="add" size={16} color="#999" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
+                <Text style={[styles.dayPillName, selected && styles.dayPillTextSelected]}>
+                  {DAYS[date.getDay()]}
+                </Text>
+                <Text style={[styles.dayPillNum, selected && styles.dayPillTextSelected]}>
+                  {date.getDate()}
+                </Text>
+                {hasEvents && (
+                  <View style={[styles.eventDot, selected && styles.eventDotSelected]} />
+                )}
+              </TouchableOpacity>
             );
           })}
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        {/* Selected Day Label */}
+        <View style={styles.selectedDayRow}>
+          <Text style={styles.selectedDayLabel}>
+            {isToday(selectedDate) ? "Today  ·  " : ""}{selectedDateStr}
+          </Text>
+          <Text style={styles.eventCount}>
+            {selectedEvents.length} {selectedEvents.length === 1 ? "event" : "events"}
+          </Text>
+        </View>
+
+        {/* Event List */}
+        <ScrollView
+          style={styles.eventList}
+          contentContainerStyle={styles.eventListContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {selectedEvents.length === 0 && !isAdding && (
+            <View style={styles.emptyState}>
+              <Ionicons name="calendar-outline" size={48} color="rgba(255,255,255,0.2)" />
+              <Text style={styles.emptyText}>No events for this day</Text>
+              <Text style={styles.emptySubtext}>Tap + to add one</Text>
+            </View>
+          )}
+
+          {selectedEvents.map((event) => (
+            <View key={event.id} style={styles.eventCard}>
+              <View style={styles.eventDotBar} />
+              <Text style={styles.eventCardText}>{event.text}</Text>
+              <TouchableOpacity
+                onPress={() => deleteEvent(event.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="trash-outline" size={18} color="rgba(255,255,255,0.3)" />
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {isAdding && (
+            <View style={styles.addInputCard}>
+              <View style={[styles.eventDotBar, styles.eventDotBarGreen]} />
+              <TextInput
+                ref={inputRef}
+                style={styles.addInput}
+                placeholder="New event..."
+                placeholderTextColor="rgba(255,255,255,0.3)"
+                value={newEvent}
+                onChangeText={setNewEvent}
+                onSubmitEditing={addEvent}
+                returnKeyType="done"
+              />
+              <TouchableOpacity onPress={addEvent}>
+                <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Add Button */}
+        {!isAdding && (
+          <TouchableOpacity style={styles.fab} onPress={handleAddPress}>
+            <Ionicons name="add" size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        {isAdding && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => {
+              setIsAdding(false);
+              setNewEvent("");
+            }}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
+  gradient: { flex: 1 },
+  container: { flex: 1 },
+
   header: {
-    padding: 20,
     paddingTop: 60,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    paddingBottom: 12,
+    paddingHorizontal: 20,
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
+    color: "#fff",
   },
   subtitle: {
     fontSize: 14,
-    color: "#666",
+    color: "#aaa",
     marginTop: 4,
   },
-  scrollView: {
-    flex: 1,
-  },
-  weekContainer: {
-    flexDirection: "row",
-    padding: 8,
-    minHeight: 400,
-  },
-  dayColumn: {
-    flex: 1,
-    marginHorizontal: 4,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    minHeight: 300,
-  },
-  todayColumn: {
-    backgroundColor: "#e8f5e9",
-    borderWidth: 2,
-    borderColor: "#4CAF50",
-  },
-  dayHeader: {
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  dayName: {
-    fontSize: 12,
-    color: "#666",
-    fontWeight: "600",
-  },
-  dayNumber: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginTop: 4,
-  },
-  todayText: {
-    color: "#4CAF50",
-  },
-  eventsContainer: {
-    flex: 1,
-    padding: 8,
-  },
-  eventItem: {
-    backgroundColor: "#f5f5f5",
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 6,
+
+  weekStrip: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  eventText: {
-    flex: 1,
-    fontSize: 11,
-    color: "#333",
-  },
-  addEventButton: {
+  dayPill: {
     alignItems: "center",
-    padding: 8,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderStyle: "dashed",
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    borderRadius: 12,
+    flex: 1,
+    marginHorizontal: 2,
   },
-  inputWrapper: {
+  dayPillSelected: {
+    backgroundColor: "#4CAF50",
+  },
+  dayPillToday: {
+    backgroundColor: "rgba(76,175,80,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(76,175,80,0.5)",
+  },
+  dayPillName: {
+    fontSize: 10,
+    color: "#aaa",
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  dayPillNum: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+    marginTop: 2,
+  },
+  dayPillTextSelected: {
+    color: "#fff",
+  },
+  eventDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#4CAF50",
+    marginTop: 4,
+  },
+  eventDotSelected: {
+    backgroundColor: "#fff",
+  },
+
+  selectedDayRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  selectedDayLabel: {
+    fontSize: 14,
+    color: "#aaa",
+    flex: 1,
+  },
+  eventCount: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.4)",
+  },
+
+  eventList: { flex: 1 },
+  eventListContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 100,
+    flexGrow: 1,
+  },
+
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 80,
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "rgba(255,255,255,0.4)",
+    marginTop: 12,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.25)",
+  },
+
+  eventCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#e8f5e9",
-    padding: 6,
-    borderRadius: 4,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    gap: 12,
   },
-  eventInput: {
+  eventDotBar: {
+    width: 3,
+    height: 36,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  eventDotBarGreen: {
+    backgroundColor: "#4CAF50",
+  },
+  eventCardText: {
     flex: 1,
-    fontSize: 11,
-    padding: 2,
+    fontSize: 15,
+    color: "#fff",
+    lineHeight: 22,
+  },
+
+  addInputCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(76,175,80,0.1)",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(76,175,80,0.3)",
+    gap: 12,
+  },
+  addInput: {
+    flex: 1,
+    fontSize: 15,
+    color: "#fff",
+  },
+
+  fab: {
+    position: "absolute",
+    right: 20,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#4CAF50",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#4CAF50",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  cancelButton: {
+    position: "absolute",
+    right: 20,
+    bottom: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  cancelText: {
+    color: "#aaa",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });
