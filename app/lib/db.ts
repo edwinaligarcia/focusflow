@@ -48,6 +48,8 @@ export const initDatabase = async (): Promise<void> => {
       id TEXT PRIMARY KEY,
       text TEXT NOT NULL,
       completed INTEGER DEFAULT 0,
+      date TEXT,
+      time TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -76,19 +78,53 @@ export const initDatabase = async (): Promise<void> => {
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try { await db.execAsync("ALTER TABLE tasks ADD COLUMN date TEXT"); } catch (_) {}
+  try { await db.execAsync("ALTER TABLE tasks ADD COLUMN time TEXT"); } catch (_) {}
 };
 
-export const getTasks = async (): Promise<{ id: string; text: string; completed: number }[]> => {
+export interface TaskRow {
+  id: string;
+  text: string;
+  completed: number;
+  date: string | null;
+  time: string | null;
+  created_at: string;
+}
+
+export const getTasks = async (): Promise<TaskRow[]> => {
   if (!db) await initDatabase();
-  const result = await db!.getAllAsync<{ id: string; text: string; completed: number }>(
+  const result = await db!.getAllAsync<TaskRow>(
     "SELECT * FROM tasks ORDER BY created_at DESC"
   );
   return result;
 };
 
-export const addTask = async (id: string, text: string): Promise<void> => {
+export const getTasksForDate = async (date: string): Promise<TaskRow[]> => {
   if (!db) await initDatabase();
-  await db!.runAsync("INSERT INTO tasks (id, text, completed) VALUES (?, ?, 0)", [id, text]);
+  const result = await db!.getAllAsync<TaskRow>(
+    "SELECT * FROM tasks WHERE date = ? ORDER BY COALESCE(time, 'zzz') ASC, created_at ASC",
+    [date]
+  );
+  return result;
+};
+
+export const getTasksForWeek = async (dates: string[]): Promise<TaskRow[]> => {
+  if (!db) await initDatabase();
+  const placeholders = dates.map(() => "?").join(",");
+  const result = await db!.getAllAsync<TaskRow>(
+    `SELECT * FROM tasks WHERE date IN (${placeholders}) ORDER BY date ASC, COALESCE(time, 'zzz') ASC, created_at ASC`,
+    dates
+  );
+  return result;
+};
+
+export const addTask = async (id: string, text: string, date?: string, time?: string): Promise<void> => {
+  if (!db) await initDatabase();
+  await db!.runAsync(
+    "INSERT INTO tasks (id, text, completed, date, time) VALUES (?, ?, 0, ?, ?)",
+    [id, text, date ?? null, time ?? null]
+  );
 };
 
 export const toggleTask = async (id: string, completed: boolean): Promise<void> => {
@@ -134,11 +170,11 @@ export const createUser = async (id: string, email: string, passwordHash: string
   );
 };
 
-export const getUserByUsername = async (username: string): Promise<User | null> => {
+export const getUserByEmail = async (email: string): Promise<User | null> => {
   if (!db) await initDatabase();
   const result = await db!.getFirstAsync<User>(
-    "SELECT * FROM users WHERE username = ?",
-    [username]
+    "SELECT * FROM users WHERE LOWER(email) = LOWER(?)",
+    [email.trim()]
   );
   return result || null;
 };

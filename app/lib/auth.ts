@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { createUser, getUserById, getFirstUser, initDatabase, deleteAllUsers, getPreference, setPreference, deletePreference, resetDatabase, migrateDatabase } from "./db";
+import { createUser, getUserById, getUserByEmail, getFirstUser, initDatabase, deleteAllUsers, getPreference, setPreference, deletePreference, resetDatabase, migrateDatabase } from "./db";
 import { generateId } from "./utils";
 
 bcrypt.setRandomFallback((len: number) => {
@@ -60,10 +60,9 @@ export const createNewUser = async (email: string, password: string): Promise<vo
   await setSession(userId);
 };
 
-export const loginUser = async (password: string): Promise<boolean> => {
-  const user = await getFirstUser();
+export const loginUser = async (email: string, password: string): Promise<boolean> => {
+  const user = await getUserByEmail(email.toLowerCase().trim());
   if (!user) return false;
-  
   const isValid = await verifyPassword(password, user.password_hash);
   if (isValid) {
     await setSession(user.id);

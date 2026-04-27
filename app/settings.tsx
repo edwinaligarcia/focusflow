@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
@@ -9,14 +10,11 @@ import type { User } from "./lib/db";
 export default function SettingsScreen() {
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    const currentUser = await getCurrentUser();
-    setUser(currentUser);
-  };
+  useFocusEffect(
+    useCallback(() => {
+      getCurrentUser().then(setUser);
+    }, [])
+  );
 
   const handleLogout = () => {
     Alert.alert(

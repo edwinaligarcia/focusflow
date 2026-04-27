@@ -28,7 +28,7 @@ export default function RootLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Daily Tasks",
+          title: "Tasks",
           headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkbox-outline" size={size} color={color} />
@@ -64,6 +64,10 @@ export default function RootLayout() {
             <Ionicons name="settings-outline" size={size} color={color} />
           ),
         }}
+      />
+      <Tabs.Screen
+        name="login"
+        options={{ href: null }}
       />
     </Tabs>
     </LinearGradient>
